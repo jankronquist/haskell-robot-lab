@@ -15,18 +15,16 @@
 -- Some imports we need, nothing to worry about.
 
 import Control.Monad
+import Data.Maybe
+import Data.Either
 
 -- Some predefined types for you to work with. If you change these some of the
 -- IO stuff will have to be changed as well, so avoid that, at least to begin
 -- with.
 
-type Command = Char
-type Robot = (Int, Int, Float) -- x, y, angle
+data Command = L | R | G deriving (Show)
+type Robot = (Int, Int, Int) -- x, y, angle
 type Level = (Int, Int) -- w, h
-
-
-
-
 
 
 -- HERE WE GO!
@@ -35,17 +33,50 @@ type Level = (Int, Int) -- w, h
 -- function. To start with, keep the type signature for `runAll` as it is and
 -- try to implement it.
 
+constrainRobot :: (Robot, Level, Robot) -> (Robot, Level)
+constrainRobot (_, level@(width, height), robot@(x, y, _)) | x >= 0 && x <= width && y >= 0 && y <= height = (robot, level)
+constrainRobot (from, level, _) = (from, level)
+
+runStep :: Robot -> Command -> Robot
+runStep (x, y, a) L = (x, y, (a + 90) `mod` 360)
+runStep (x, y, a) R = (x, y, (a + 270) `mod` 360)
+runStep (x, y, 0) G = (x+1, y, 0)
+runStep (x, y, 90) G = (x, y+1, 90)
+runStep (x, y, 180) G = (x-1, y, 180)
+runStep (x, y, 270) G = (x, y-1, 270)
+runStep state _ = state
+
+constrainedStep :: (Robot, Level) -> Command -> (Robot, Level)
+constrainedStep (robot, level) command = constrainRobot (robot, level, runStep robot command)
+
+
 runAll :: Robot -> Level -> [Command] -> Robot
-runAll _ _ _ = undefined
+runAll robot level cmds = fst $ foldl constrainedStep (robot, level) cmds
 
 
+parse :: Char -> Maybe Command
+parse 'L' = Just L
+parse 'R' = Just R
+parse 'G' = Just G
+parse _ = Nothing
+
+parseAll :: String -> [Command]
+parseAll string = catMaybes $ map parse string
 
 
+parse2 :: Char -> Either Char Command
+parse2 'L' = Right L
+parse2 'R' = Right R
+parse2 'G' = Right G
+parse2 c = Left c
 
+leftsOrRights :: [Either a b] -> Either [a] [b]
+leftsOrRights stuff = let l = lefts stuff
+            in if null l then (Right $ rights stuff) else Left l
+            
+parseAll2 :: String -> Either String [Command]
+parseAll2 s = leftsOrRights $ map parse2 s
 
-
--- EXTRAS:
---
 -- When you have a working `runAll` you can move on by...
 --
 -- * restraining the robot from moving outside the level.
@@ -77,13 +108,14 @@ level :: Level
 level = (20, 20)
 
 startRobot :: Robot
-startRobot = (10, 10, 0.0)
+startRobot = (10, 10, 0)
 
 main :: IO ()
 main = next startRobot
   where next r = do
           cmds <- getLine
           unless (null cmds) $ do
-            let r2 = runAll r level cmds
+            let cs = parseAll cmds
+            let r2 = runAll r level cs
             putStr $ printLevel level r2
             next r2
